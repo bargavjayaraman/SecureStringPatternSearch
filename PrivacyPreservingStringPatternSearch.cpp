@@ -406,13 +406,13 @@ float getMedoid(splitnode *node, string *m1, string *m2)
 	return cost;
 }
 
-
 void createSplitTree(splitnode *node)
 {
-	vector<string> L, R, S;
+	vector<string> L, R, S, dummy;
 	int k = 0, c, num;
 	float cost1, cost2, a, b;
 	PQ Q;
+	bool flag = false;
 	splitnode *leftNode, *rightNode;
 	string *m1, *m2, *m3, *m4, *m5, *m6, *m7, *m8, *m9, *m10, *o1, *o2;
 	m1 = new string();m2 = new string();o1 = new string();o2 = new string();	
@@ -471,72 +471,51 @@ void createSplitTree(splitnode *node)
 	}
 	// make clusters
 	
-	if(L.size() > R.size())
+	if(L.size() < R.size())
 	{
-		num = (L.size()-R.size())/2;
-		for(vector<string>::iterator it = L.begin(); it != L.end(); it++)
+		dummy = L;
+		L = R;
+		R = dummy;
+		flag = true;
+	}
+	num = (L.size()-R.size())/2;
+	for(vector<string>::iterator it = L.begin(); it != L.end(); it++)
+	{
+		if(num == 0)
+			break;
+		if(k++ < num)
 		{
-			if(num == 0)
-				break;
-			if(k++ < num)
+			Qobj ob;
+			ob.name = *it;
+			ob.val = sims[*it][*R.begin()];
+			Q.push(ob);
+		}
+		else
+		{
+			Qobj ob;
+			ob.name = *it;
+			ob.val = sims[*it][*R.begin()];
+			if(ob.val > Q.top().val)
 			{
-				Qobj ob;
-				ob.name = *it;
-				ob.val = sims[*it][*R.begin()];
+				Q.pop();
 				Q.push(ob);
 			}
-			else
-			{
-				Qobj ob;
-				ob.name = *it;
-				ob.val = sims[*it][*R.begin()];
-				if(ob.val > Q.top().val)
-				{
-					Q.pop();
-					Q.push(ob);
-				}
-			}
-		}
-		while(!Q.empty())
-		{
-			L.erase(find(L.begin(), L.end(), Q.top().name));
-			R.push_back(Q.top().name);
-			Q.pop();
 		}
 	}
-	else if(R.size() > L.size())
+	while(!Q.empty())
 	{
-		num = (R.size()-L.size())/2;
-		for(vector<string>::iterator it = R.begin(); it != R.end(); it++)
-		{
-			if(num == 0)
-				break;
-			if(k++ < num)
-			{
-				Qobj ob;
-				ob.name = *it;
-				ob.val = sims[*it][*L.begin()];
-				Q.push(ob);
-			}
-			else
-			{
-				Qobj ob;
-				ob.name = *it;
-				ob.val = sims[*it][*L.begin()];
-				if(ob.val > Q.top().val)
-				{
-					Q.pop();
-					Q.push(ob);
-				}
-			}
-		}
-		while(!Q.empty())
-		{
-			R.erase(find(R.begin(), R.end(), Q.top().name));
-			L.push_back(Q.top().name);
-			Q.pop();
-		}
+		L.erase(find(L.begin(), L.end(), Q.top().name));
+		R.push_back(Q.top().name);
+		Q.pop();
 	}
+
+	if(flag)
+	{
+		dummy = L;
+		L = R;
+		R = dummy;
+	}
+	
 	leftNode = new splitnode;
 	leftNode->kws = L;
 	leftNode->left = leftNode->right = NULL;
