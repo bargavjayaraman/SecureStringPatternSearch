@@ -25,6 +25,7 @@
 	m/n = 12, k = 8 (14 hash keys)
 */
 
+#define NUM_KWS   1000
 #define NUM_FILES 100
 #define MbyN	  10
 #define K	  7
@@ -66,7 +67,7 @@ struct a_list
 
 unsigned char key[32];
 
-unsigned char hashKey1[20], hashKey2[20], hashKey3[20], hashKey4[20], hashKey5[20], hashKey6[20], hashKey7[20];
+unsigned char hashKey[7][20];
 unsigned char iv[16], iv_save[16];
 unsigned char ip[128], op[128];
 aes_context aes;
@@ -135,15 +136,11 @@ unsigned int murmur( const void * key, int len, unsigned int seed , int range)
 {
 	const unsigned int m = 0x5bd1e995;
 	const int r = 24;
-
 	unsigned int h = seed ^ len;
-
 	const unsigned char * data = (const unsigned char *)key;
-
 	while(len >= 4)
 	{
 		unsigned int k = *(unsigned int *)data;
-
 		k *= m;
 		k ^= k >> r;
 		k *= m;
@@ -154,7 +151,6 @@ unsigned int murmur( const void * key, int len, unsigned int seed , int range)
 		data += 4;
 		len -= 4;
 	}
-
 	switch(len)
 	{
 	case 3: h ^= data[2] << 16;
@@ -162,11 +158,9 @@ unsigned int murmur( const void * key, int len, unsigned int seed , int range)
 	case 1: h ^= data[0];
 		h *= m;
 	};
-
 	h ^= h >> 13;
 	h *= m;
 	h ^= h >> 15;
-
 	return (unsigned int)h%range;
 }
 
@@ -179,7 +173,7 @@ void getPrimes()
 {
 	ifstream fin;
 	int num;
-	fin.open("primes2.txt", ios::in);
+	fin.open("primes.txt", ios::in);
 	while(fin>>num)
 		primes.push_back(num);
 	fin.close();
@@ -189,7 +183,7 @@ void getFpWords()
 {
 	ifstream fin;
 	char word[65];
-	fin.open("fpwords.txt", ios::in);
+	fin.open("stop-words-1.txt", ios::in);
 	while(fin>>word)
 		fpWords.push_back(word);
 	fin.close();
@@ -222,8 +216,7 @@ void getKeywords(char *file)
 	ifstream f;
 	char s[3000];
 	char str[60], a[60];
-
-	strcpy(a, "10000//");
+	strcpy(a, "we//");
 	strcat(a, file);
 	f.open(a, ios::in);
 	while(!f.eof())
@@ -247,8 +240,7 @@ void readfile(char *file)
 	char s[3000];
 	char str[60], a[60], b[12];
 	bool flag = false;
-
-	strcpy(a, "10000//");
+	strcpy(a, "we//");
 	strcat(a, file);
 	f.open(a, ios::in);
 	while(!f.eof())
@@ -382,262 +374,80 @@ void PAM(vector<string> S, int s, string *m1, string *m2)
 	*m2 = S[r2];
 }
 
-int getMaxCost(float a, float b, float c, float d, float e)
+float getMedoid(splitnode *node, string *m1, string *m2)
 {
-	int x;
-	float max = 0;
-	if(max < a)
+	int r;
+	float a, b, cost = 0;
+	unordered_set<int> used;
+	vector<string> S;
+	while(S.size() != S_SIZE)
 	{
-		max = a;
-		x = 1;
+		r = rand()%node->kws.size();
+		if(used.find(r) == used.end())
+		{
+			S.push_back(node->kws[r]);
+			used.insert(r);
+		}
 	}
-	if(max < b)
+	PAM(S, S_SIZE, m1, m2);
+	for(vector<string>::iterator it = node->kws.begin(); it != node->kws.end(); it++)
 	{
-		max = b;
-		x = 2;
+		if(*it != *m1 && *it != *m2)
+		{
+			if(sims[*it].find(*m1) == sims[*it].end())
+				sims[*m1][*it] = sims[*it][*m1] = getWeight(*it, *m1);
+			a = sims[*it][*m1];
+			if(sims[*it].find(*m2) == sims[*it].end())
+				sims[*m2][*it] = sims[*it][*m2] = getWeight(*it, *m2);
+			b = sims[*it][*m2];
+			cost += (a > b) ? a : b;
+		}
 	}
-	if(max < c)
-	{
-		max = c;
-		x = 3;
-	}
-	if(max < d)
-	{
-		max = d;
-		x = 4;
-	}
-	if(max < e)
-	{
-		max = e;
-		x = 5;
-	}
-	return x;
+	return cost;
 }
+
 
 void createSplitTree(splitnode *node)
 {
 	vector<string> L, R, S;
-	unordered_set<int> used;
-	int k = 0, r, c, num;
-	float cost1, cost2, cost3, cost4, cost5, a, b;
+	int k = 0, c, num;
+	float cost1, cost2, a, b;
 	PQ Q;
 	splitnode *leftNode, *rightNode;
 	string *m1, *m2, *m3, *m4, *m5, *m6, *m7, *m8, *m9, *m10, *o1, *o2;
-	m1 = new string();
-	m2 = new string();
-	m3 = new string();
-	m4 = new string();
-	m5 = new string();
-	m6 = new string();
-	m7 = new string();
-	m8 = new string();
-	m9 = new string();
-	m10 = new string();	
-	o1 = new string();
-	o2 = new string();	
+	m1 = new string();m2 = new string();o1 = new string();o2 = new string();	
 
-	cost1 = cost2 = cost3 = cost4 = cost5 = 0;
 	if(node->kws.size() <= 1)
 		return;
-
 	if(node->kws.size() <= S_SIZE)
 		PAM(node->kws, node->kws.size(), o1, o2);
-
 	// get random S_SIZE kws and form a vector S, send it to PAM
 	else if(node->kws.size() <= S_SIZE*3)
 	{
-		while(S.size() != S_SIZE)
-		{
-			r = rand()%node->kws.size();
-			if(used.find(r) == used.end())
-			{
-				S.push_back(node->kws[r]);
-				used.insert(r);
-			}
-		}
-		PAM(S, S_SIZE, o1, o2);
+		cost1 = getMedoid(node, o1, o2);
 	}
-	
 	else if(node->kws.size() <= S_SIZE*5)
 	{
 		// call 2 times
-		while(S.size() != S_SIZE)
-		{
-			r = rand()%node->kws.size();
-			if(used.find(r) == used.end())
-			{
-				S.push_back(node->kws[r]);
-				used.insert(r);
-			}
-		}
-		PAM(S, S_SIZE, m1, m2);
-		used.clear();
-		S.clear();
-		while(S.size() != S_SIZE)
-		{
-			r = rand()%node->kws.size();
-			if(used.find(r) == used.end())
-			{
-				S.push_back(node->kws[r]);
-				used.insert(r);
-			}
-		}
-		PAM(S, S_SIZE, m3, m4);
-		for(vector<string>::iterator it = node->kws.begin(); it != node->kws.end(); it++)
-		{
-			if(*it != *m1 && *it != *m2)
-			{
-				if(sims[*it].find(*m1) == sims[*it].end())
-					sims[*m1][*it] = sims[*it][*m1] = getWeight(*it, *m1);
-				a = sims[*it][*m1];
-				if(sims[*it].find(*m2) == sims[*it].end())
-					sims[*m2][*it] = sims[*it][*m2] = getWeight(*it, *m2);
-				b = sims[*it][*m2];
-				cost1 += (a > b) ? a : b;
-			}
-			if(*it != *m3 && *it != *m4)
-			{	
-				if(sims[*it].find(*m3) == sims[*it].end())
-					sims[*m3][*it] = sims[*it][*m3] = getWeight(*it, *m3);
-				a = sims[*it][*m3];
-				if(sims[*it].find(*m4) == sims[*it].end())
-					sims[*m4][*it] = sims[*it][*m4] = getWeight(*it, *m4);
-				b = sims[*it][*m4];
-				cost2 += (a > b) ? a : b;
-			}
-		}
-		if(cost1 > cost2)
+		cost1 = getMedoid(node, o1, o2);
+		cost2 = getMedoid(node, m1, m2);
+		if(cost2 > cost1)
 		{
 			*o1 = *m1; *o2= *m2;
 		}
-		else
-		{
-			*o1 = *m3; *o2= *m4;
-		}
 	}
-	
 	else
 	{
 		// call 5 times
-		while(S.size() != S_SIZE)
+		cost1 = getMedoid(node, o1, o2);
+		for(int run = 1; run < 5; run++)
 		{
-			r = rand()%node->kws.size();
-			if(used.find(r) == used.end())
+			cost2 = getMedoid(node, m1, m2);
+			if(cost2 > cost1)
 			{
-				S.push_back(node->kws[r]);
-				used.insert(r);
+				*o1 = *m1; *o2= *m2;
+				cost1 = cost2;
 			}
-		}
-		PAM(S, S_SIZE, m1, m2);
-		used.clear();
-		S.clear();
-		while(S.size() != S_SIZE)
-		{
-			r = rand()%node->kws.size();
-			if(used.find(r) == used.end())
-			{
-				S.push_back(node->kws[r]);
-				used.insert(r);
-			}
-		}
-		PAM(S, S_SIZE, m3, m4);
-		used.clear();
-		S.clear();
-		while(S.size() != S_SIZE)
-		{
-			r = rand()%node->kws.size();
-			if(used.find(r) == used.end())
-			{
-				S.push_back(node->kws[r]);
-				used.insert(r);
-			}
-		}
-		PAM(S, S_SIZE, m5, m6);
-		used.clear();
-		S.clear();
-		while(S.size() != S_SIZE)
-		{
-			r = rand()%node->kws.size();
-			if(used.find(r) == used.end())
-			{
-				S.push_back(node->kws[r]);
-				used.insert(r);
-			}
-		}
-		PAM(S, S_SIZE, m7, m8);
-		used.clear();
-		S.clear();
-		while(S.size() != S_SIZE)
-		{
-			r = rand()%node->kws.size();
-			if(used.find(r) == used.end())
-			{
-				S.push_back(node->kws[r]);
-				used.insert(r);
-			}
-		}
-		PAM(S, S_SIZE, m9, m10);
-		for(vector<string>::iterator it = node->kws.begin(); it != node->kws.end(); it++)
-		{
-			if(*it != *m1 && *it != *m2)
-			{
-				if(sims[*it].find(*m1) == sims[*it].end())
-					sims[*m1][*it] = sims[*it][*m1] = getWeight(*it, *m1);
-				a = sims[*it][*m1];
-				if(sims[*it].find(*m2) == sims[*it].end())
-					sims[*m2][*it] = sims[*it][*m2] = getWeight(*it, *m2);
-				b = sims[*it][*m2];
-				cost1 += (a > b) ? a : b;
-			}
-			if(*it != *m3 && *it != *m4)
-			{	
-				if(sims[*it].find(*m3) == sims[*it].end())
-					sims[*m3][*it] = sims[*it][*m3] = getWeight(*it, *m3);
-				a = sims[*it][*m3];
-				if(sims[*it].find(*m4) == sims[*it].end())
-					sims[*m4][*it] = sims[*it][*m4] = getWeight(*it, *m4);
-				b = sims[*it][*m4];
-				cost2 += (a > b) ? a : b;
-			}
-			if(*it != *m5 && *it != *m6)
-			{
-				if(sims[*it].find(*m5) == sims[*it].end())
-					sims[*m5][*it] = sims[*it][*m5] = getWeight(*it, *m5);
-				a = sims[*it][*m5];
-				if(sims[*it].find(*m6) == sims[*it].end())
-					sims[*m6][*it] = sims[*it][*m6] = getWeight(*it, *m6);
-				b = sims[*it][*m6];
-				cost3 += (a > b) ? a : b;
-			}
-			if(*it != *m7 && *it != *m8)
-			{
-				if(sims[*it].find(*m7) == sims[*it].end())
-					sims[*m7][*it] = sims[*it][*m7] = getWeight(*it, *m7);
-				a = sims[*it][*m7];
-				if(sims[*it].find(*m8) == sims[*it].end())
-					sims[*m8][*it] = sims[*it][*m8] = getWeight(*it, *m8);
-				b = sims[*it][*m8];
-				cost4 += (a > b) ? a : b;
-			}
-			if(*it != *m9 && *it != *m10)
-			{
-				if(sims[*it].find(*m9) == sims[*it].end())
-					sims[*m9][*it] = sims[*it][*m9] = getWeight(*it, *m9);
-				a = sims[*it][*m9];
-				if(sims[*it].find(*m10) == sims[*it].end())
-					sims[*m10][*it] = sims[*it][*m10] = getWeight(*it, *m10);
-				b = sims[*it][*m10];
-				cost5 += (a > b) ? a : b;
-			}
-		}
-		c = getMaxCost(cost1,cost2,cost3,cost4,cost5);
-		switch(c)
-		{
-			case 1:	*o1 = *m1; *o2 = *m2; break;
-			case 2:	*o1 = *m3; *o2 = *m4; break;
-			case 3:	*o1 = *m5; *o2 = *m6; break;
-			case 4:	*o1 = *m7; *o2 = *m8; break;
-			case 5:	*o1 = *m9; *o2 = *m10; break;
 		}
 		// get max cost as medoids..
 	}
@@ -738,7 +548,7 @@ void createSplitTree(splitnode *node)
 	node->left = leftNode;
 	node->right = rightNode;
 
-	delete(m1);delete(m2);delete(m3);delete(m4);delete(m5);delete(m6);delete(m7);delete(m8);delete(m9);delete(m10);delete(o1);delete(o2);
+	delete(m1);delete(m2);delete(o1);delete(o2);
 
 	createSplitTree(leftNode);
 	createSplitTree(rightNode);
@@ -945,7 +755,7 @@ void createBloomTree(bloomnode *bnode, splitnode *snode, int currentDepth)
 
 void storeInBloom(int *bloom, int bloomsize, unsigned int bloomID, string word)
 {
-	unsigned int v1, v2, v3, v4, v5, v6, v7, i, hashVal;
+	unsigned int v[7], i, run, hashVal;
 	char str[200], buffer[33];
 	unsigned char hashStr[20], hashFinal[20];
 	
@@ -956,67 +766,22 @@ void storeInBloom(int *bloom, int bloomsize, unsigned int bloomID, string word)
 		strcpy(str, (*it).c_str());
 		snprintf(buffer, sizeof(buffer), "%d", bloomID);
 		
-		sha1_hmac(hashKey1, 20, (unsigned char*)str, strlen(str), hashStr);
-		sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-		hashVal = 0;
-		for(i = 0; i < 20; i++)
-			hashVal ^= hashFinal[i]<<(8*(i%4));
-		v1 = hashVal%bloomsize;
-		bloom[v1/32] |= 1<<(v1%32);
-		
-		sha1_hmac(hashKey2, 20, (unsigned char*)str, strlen(str), hashStr);
-		sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-		hashVal = 0;
-		for(i = 0; i < 20; i++)
-			hashVal ^= hashFinal[i]<<(8*(i%4));
-		v2 = hashVal%bloomsize;
-		bloom[v2/32] |= 1<<(v2%32);
-		
-		sha1_hmac(hashKey3, 20, (unsigned char*)str, strlen(str), hashStr);
-		sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-		hashVal = 0;
-		for(i = 0; i < 20; i++)
-			hashVal ^= hashFinal[i]<<(8*(i%4));
-		v3 = hashVal%bloomsize;
-		bloom[v3/32] |= 1<<(v3%32);
-		
-		sha1_hmac(hashKey4, 20, (unsigned char*)str, strlen(str), hashStr);
-		sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-		hashVal = 0;
-		for(i = 0; i < 20; i++)
-			hashVal ^= hashFinal[i]<<(8*(i%4));
-		v4 = hashVal%bloomsize;
-		bloom[v4/32] |= 1<<(v4%32);
-		
-		sha1_hmac(hashKey5, 20, (unsigned char*)str, strlen(str), hashStr);
-		sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-		hashVal = 0;
-		for(i = 0; i < 20; i++)
-			hashVal ^= hashFinal[i]<<(8*(i%4));
-		v5 = hashVal%bloomsize;
-		bloom[v5/32] |= 1<<(v5%32);
-		
-		sha1_hmac(hashKey6, 20, (unsigned char*)str, strlen(str), hashStr);
-		sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-		hashVal = 0;
-		for(i = 0; i < 20; i++)
-			hashVal ^= hashFinal[i]<<(8*(i%4));
-		v6 = hashVal%bloomsize;
-		bloom[v6/32] |= 1<<(v6%32);
-	
-		sha1_hmac(hashKey7, 20, (unsigned char*)str, strlen(str), hashStr);
-		sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-		hashVal = 0;
-		for(i = 0; i < 20; i++)
-			hashVal ^= hashFinal[i]<<(8*(i%4));
-		v7 = hashVal%bloomsize;
-		bloom[v7/32] |= 1<<(v7%32);
+		for(run = 0; run < 7; run++)
+		{
+			sha1_hmac(hashKey[run], 20, (unsigned char*)str, strlen(str), hashStr);
+			sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
+			hashVal = 0;
+			for(i = 0; i < 20; i++)
+				hashVal ^= hashFinal[i]<<(8*(i%4));
+			v[run] = hashVal%bloomsize;
+			bloom[v[run]/32] |= 1<<(v[run]%32);
+		}		
 	}
 }
 
 void storeInPrefixBloom(int *bloom, int bloomsize, unsigned int bloomID, string word, unsigned int startPoint)
 {
-	unsigned int v1, v2, v3, v4, v5, v6, v7, i, j, k, hashVal;
+	unsigned int v[7], i, j, k, run, hashVal;
 	char str[200], buffer[33];
 	unsigned char hashStr[20], hashFinal[20];
 	
@@ -1041,123 +806,40 @@ void storeInPrefixBloom(int *bloom, int bloomsize, unsigned int bloomID, string 
 			
 			snprintf(buffer, sizeof(buffer), "%d", bloomID);
 			
-			sha1_hmac(hashKey1, 20, (unsigned char*)str, strlen(str), hashStr);
-			sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-			hashVal = 0;
-			for(i = 0; i < 20; i++)
-				hashVal ^= hashFinal[i]<<(8*(i%4));
-			v1 = hashVal%bloomsize;
-			bloom[v1/32] |= 1<<(v1%32);
-
-			sha1_hmac(hashKey2, 20, (unsigned char*)str, strlen(str), hashStr);
-			sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-			hashVal = 0;
-			for(i = 0; i < 20; i++)
-				hashVal ^= hashFinal[i]<<(8*(i%4));
-			v2 = hashVal%bloomsize;
-			bloom[v2/32] |= 1<<(v2%32);
-			
-			sha1_hmac(hashKey3, 20, (unsigned char*)str, strlen(str), hashStr);
-			sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-			hashVal = 0;
-			for(i = 0; i < 20; i++)
-				hashVal ^= hashFinal[i]<<(8*(i%4));
-			v3 = hashVal%bloomsize;
-			bloom[v3/32] |= 1<<(v3%32);
-
-			sha1_hmac(hashKey4, 20, (unsigned char*)str, strlen(str), hashStr);
-			sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-			hashVal = 0;
-			for(i = 0; i < 20; i++)
-				hashVal ^= hashFinal[i]<<(8*(i%4));
-			v4 = hashVal%bloomsize;
-			bloom[v4/32] |= 1<<(v4%32);
-			
-			sha1_hmac(hashKey5, 20, (unsigned char*)str, strlen(str), hashStr);
-			sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-			hashVal = 0;
-			for(i = 0; i < 20; i++)
-			hashVal ^= hashFinal[i]<<(8*(i%4));
-			v5 = hashVal%bloomsize;
-			bloom[v5/32] |= 1<<(v5%32);
-
-			sha1_hmac(hashKey6, 20, (unsigned char*)str, strlen(str), hashStr);
-			sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-			hashVal = 0;
-			for(i = 0; i < 20; i++)
-				hashVal ^= hashFinal[i]<<(8*(i%4));
-			v6 = hashVal%bloomsize;
-			bloom[v6/32] |= 1<<(v6%32);
-		
-			sha1_hmac(hashKey7, 20, (unsigned char*)str, strlen(str), hashStr);
-			sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-			hashVal = 0;
-			for(i = 0; i < 20; i++)
-				hashVal ^= hashFinal[i]<<(8*(i%4));
-			v7 = hashVal%bloomsize;
-			bloom[v7/32] |= 1<<(v7%32);
+			for(run = 0; run < 7; run++)
+			{
+				sha1_hmac(hashKey[run], 20, (unsigned char*)str, strlen(str), hashStr);
+				sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
+				hashVal = 0;
+				for(i = 0; i < 20; i++)
+					hashVal ^= hashFinal[i]<<(8*(i%4));
+				v[run] = hashVal%bloomsize;
+				bloom[v[run]/32] |= 1<<(v[run]%32);
+			}
 		}
 	}
 }
 
 bool searchInBloom(int *bloom, int bloomsize, unsigned int bloomID, char *str)
 {
-	unsigned int v1, v2, v3, v4, v5, v6, v7, i, hashVal;
+	unsigned int v[7], run, i, hashVal, ret = 1;
 	char buffer[33];
 	unsigned char hashStr[20], hashFinal[20];
 
 	snprintf(buffer, sizeof(buffer), "%d", bloomID);
+
+	for(run = 0; run < 7; run++)
+	{
+		sha1_hmac(hashKey[run], 20, (unsigned char*)str, strlen(str), hashStr);
+		sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
+		hashVal = 0;
+		for(i = 0; i < 20; i++)
+			hashVal ^= hashFinal[i]<<(8*(i%4));
+		v[run] = hashVal%bloomsize;
+		ret = ret && (bloom[v[run]/32] & 1<<(v[run]%32));
+	}
 	
-	sha1_hmac(hashKey1, 20, (unsigned char*)str, strlen(str), hashStr);
-	sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-	hashVal = 0;
-	for(i = 0; i < 20; i++)
-		hashVal ^= hashFinal[i]<<(8*(i%4));
-	v1 = hashVal%bloomsize;
-
-	sha1_hmac(hashKey2, 20, (unsigned char*)str, strlen(str), hashStr);
-	sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-	hashVal = 0;
-	for(i = 0; i < 20; i++)
-		hashVal ^= hashFinal[i]<<(8*(i%4));
-	v2 = hashVal%bloomsize;
-
-	sha1_hmac(hashKey3, 20, (unsigned char*)str, strlen(str), hashStr);
-	sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-	hashVal = 0;
-	for(i = 0; i < 20; i++)
-		hashVal ^= hashFinal[i]<<(8*(i%4));
-	v3 = hashVal%bloomsize;
-
-	sha1_hmac(hashKey4, 20, (unsigned char*)str, strlen(str), hashStr);
-	sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-	hashVal = 0;
-	for(i = 0; i < 20; i++)
-		hashVal ^= hashFinal[i]<<(8*(i%4));
-	v4 = hashVal%bloomsize;
-
-	sha1_hmac(hashKey5, 20, (unsigned char*)str, strlen(str), hashStr);
-	sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-	hashVal = 0;
-	for(i = 0; i < 20; i++)
-		hashVal ^= hashFinal[i]<<(8*(i%4));
-	v5 = hashVal%bloomsize;
-
-	sha1_hmac(hashKey6, 20, (unsigned char*)str, strlen(str), hashStr);
-	sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-	hashVal = 0;
-	for(i = 0; i < 20; i++)
-		hashVal ^= hashFinal[i]<<(8*(i%4));
-	v6 = hashVal%bloomsize;
-
-	sha1_hmac(hashKey7, 20, (unsigned char*)str, strlen(str), hashStr);
-	sha1_hmac(hashStr, 20, (unsigned char*)buffer, strlen(buffer), hashFinal);
-	hashVal = 0;
-	for(i = 0; i < 20; i++)
-	hashVal ^= hashFinal[i]<<(8*(i%4));
-	v7 = hashVal%bloomsize;
-
-	return (bloom[v1/32] & 1<<(v1%32)) && (bloom[v2/32] & 1<<(v2%32)) && (bloom[v3/32] & 1<<(v3%32)) && (bloom[v4/32] & 1<<(v4%32)) && (bloom[v5/32] & 1<<(v5%32)) && (bloom[v6/32] & 1<<(v6%32)) && (bloom[v7/32] & 1<<(v7%32));
+	return ret;
 }
 
 unsigned int evaluatePoly(Poly *poly, char *str)
@@ -1493,73 +1175,28 @@ int main()
 		iv_save[i] = iv[i] = (char)(i + 40);
 	aes_setkey_enc( &aes, key, 128 );
 
-	for(i = 0; i < 5; i++)
+	for(int run = 0; run < 7; run++)
 	{
-		val = rand();
-		hashKey1[i*4] = val & 0xff;
-		hashKey1[i*4+1] = (val>>8) & 0xff;
-		hashKey1[i*4+2] = (val>>16) & 0xff;
-		hashKey1[i*4+3] = (val>>24) & 0xff;
-	}
-	for(i = 0; i < 5; i++)
-	{
-		val = rand();
-		hashKey2[i*4] = val & 0xff;
-		hashKey2[i*4+1] = (val>>8) & 0xff;
-		hashKey2[i*4+2] = (val>>16) & 0xff;
-		hashKey2[i*4+3] = (val>>24) & 0xff;
-	}
-	for(i = 0; i < 5; i++)
-	{
-		val = rand();
-		hashKey3[i*4] = val & 0xff;
-		hashKey3[i*4+1] = (val>>8) & 0xff;
-		hashKey3[i*4+2] = (val>>16) & 0xff;
-		hashKey3[i*4+3] = (val>>24) & 0xff;
-	}
-	for(i = 0; i < 5; i++)
-	{
-		val = rand();
-		hashKey4[i*4] = val & 0xff;
-		hashKey4[i*4+1] = (val>>8) & 0xff;
-		hashKey4[i*4+2] = (val>>16) & 0xff;
-		hashKey4[i*4+3] = (val>>24) & 0xff;
-	}
-	for(i = 0; i < 5; i++)
-	{	
-		val = rand();
-		hashKey5[i*4] = val & 0xff;
-		hashKey5[i*4+1] = (val>>8) & 0xff;
-		hashKey5[i*4+2] = (val>>16) & 0xff;
-		hashKey5[i*4+3] = (val>>24) & 0xff;
-	}
-	for(i = 0; i < 5; i++)
-	{
-		val = rand();
-		hashKey6[i*4] = val & 0xff;
-		hashKey6[i*4+1] = (val>>8) & 0xff;
-		hashKey6[i*4+2] = (val>>16) & 0xff;
-		hashKey6[i*4+3] = (val>>24) & 0xff;
-	}
-	for(i = 0; i < 5; i++)
-	{
-		val = rand();
-		hashKey7[i*4] = val & 0xff;
-		hashKey7[i*4+1] = (val>>8) & 0xff;
-		hashKey7[i*4+2] = (val>>16) & 0xff;
-		hashKey7[i*4+3] = (val>>24) & 0xff;
+		for(i = 0; i < 5; i++)
+		{
+			val = rand();
+			hashKey[run][i*4] = val & 0xff;
+			hashKey[run][i*4+1] = (val>>8) & 0xff;
+			hashKey[run][i*4+2] = (val>>16) & 0xff;
+			hashKey[run][i*4+3] = (val>>24) & 0xff;
+		}
 	}
 	getPrimes();
 	getStopwords();
 	getFpWords();
 
-	while(chosenFpWords.size() < 1000)
+	while(chosenFpWords.size() < 100)
 	{
 		pos = (int)rand() % fpWords.size();
 		chosenFpWords.insert(fpWords[pos]);
 	}
 
-	DIR *mydir = opendir("10000");
+	DIR *mydir = opendir("we");
 	struct dirent *entry = NULL;
 	
 	while((entry = readdir(mydir)))
@@ -1585,7 +1222,7 @@ int main()
 	for(unordered_set<string>::iterator it = init_table.begin(); it != init_table.end(); it++)
 	{
 		allKeywords.insert(*it);
-		if(i++ == 10000)
+		if(i++ == NUM_KWS)
 			break;
 	}
 	init_table.clear();
@@ -1595,7 +1232,7 @@ int main()
 		strcpy(word, (*it).c_str());
 		readfile(word);
 	}
-	out.open("output2//PASStree+_poly//10000kws//100//op1.txt",ios::out);
+	out.open("op1.txt",ios::out);
 	out<<inverted_table.size()<<'\t';
 	for(map<string, a_list>::iterator it = inverted_table.begin(); it != inverted_table.end(); it++)
 		for(vector<pairs>::iterator it2 = (*it).second.docIDs.begin(); it2 != (*it).second.docIDs.end(); it2++)
@@ -1705,257 +1342,35 @@ int main()
 			fp++;
 		resultset.clear();		
 	}
-	out<<"\nFP Rate is:\t"<<(float)fp/10.0<<endl;
+	out<<"\nFP Rate is:\t"<<(float)fp<<endl;
 
-	out<<"\n10 query result size:\n";
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(10, false, false);
-	out<<"Average time for prefix query:\t\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(10, false, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
+	for(int run = 10; run <= 100; run += 10)
+	{
+		out<<"\n"<<run<<" query result size:\n";
+		elapsedTime = 0;
+		for(i = 0; i < 10; i++)
+			elapsedTime += getQuery(run, false, false);
+		out<<"Average time for prefix query:\t\t"<<elapsedTime/10.0<<endl;
+		out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
+		ranking.clear();
+		elapsedTime = 0;
+		for(i = 0; i < 10; i++)
+			elapsedTime += getQuery(run, false, true);
+		out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
+		ranking.clear();
 
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(10, true, false);
-	out<<"Average time for substring query:\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(10, true, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-
-	out<<"\n20 query result size:\n";
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(20, false, false);
-	out<<"Average time for prefix query:\t\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(20, false, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)	
-		elapsedTime += getQuery(20, true, false);
-	out<<"Average time for substring query:\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(20, true, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-
-	out<<"\n30 query result size:\n";
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(30, false, false);
-	out<<"Average time for prefix query:\t\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(30, false, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(30, true, false);
-	out<<"Average time for substring query:\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(30, true, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-
-	out<<"\n40 query result size:\n";
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)	
-		elapsedTime += getQuery(40, false, false);
-	out<<"Average time for prefix query:\t\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(40, false, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)	
-		elapsedTime += getQuery(40, true, false);
-	out<<"Average time for substring query:\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(40, true, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-
-	out<<"\n50 query result size:\n";
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(50, false, false);
-	out<<"Average time for prefix query:\t\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(50, false, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)	
-		elapsedTime += getQuery(50, true, false);
-	out<<"Average time for substring query:\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(50, true, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-
-	out<<"\n60 query result size:\n";
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)	
-		elapsedTime += getQuery(60, false, false);
-	out<<"Average time for prefix query:\t\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(60, false, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)	
-		elapsedTime += getQuery(60, true, false);
-	out<<"Average time for substring query:\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(60, true, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-
-	out<<"\n70 query result size:\n";
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(70, false, false);
-	out<<"Average time for prefix query:\t\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(70, false, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(70, true, false);
-	out<<"Average time for substring query:\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(70, true, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-
-	out<<"\n80 query result size:\n";
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(80, false, false);
-	out<<"Average time for prefix query:\t\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(80, false, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(80, true, false);
-	out<<"Average time for substring query:\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(80, true, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-
-	out<<"\n90 query result size:\n";
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(90, false, false);
-	out<<"Average time for prefix query:\t\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(90, false, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(90, true, false);
-	out<<"Average time for substring query:\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(90, true, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-
-	out<<"\n100 query result size:\n";
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(100, false, false);
-	out<<"Average time for prefix query:\t\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(100, false, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(100, true, false);
-	out<<"Average time for substring query:\t"<<elapsedTime/10.0<<endl;
-	out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
-	elapsedTime = 0;
-	for(i = 0; i < 10; i++)
-		elapsedTime += getQuery(100, true, true);
-	out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
-	ranking.clear();
+		elapsedTime = 0;
+		for(i = 0; i < 10; i++)
+			elapsedTime += getQuery(run, true, false);
+		out<<"Average time for substring query:\t"<<elapsedTime/10.0<<endl;
+		out<<"Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
+		ranking.clear();
+		elapsedTime = 0;
+		for(i = 0; i < 10; i++)
+			elapsedTime += getQuery(run, true, true);
+		out<<"Relative Accuracy:\t"<<(float)(*ranking.begin()).second.acc/(*ranking.begin()).second.cnt<<"\n";
+		ranking.clear();
+	}
 
 	out.close();
 	return 0;
