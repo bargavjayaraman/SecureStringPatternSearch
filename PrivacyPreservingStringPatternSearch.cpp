@@ -26,7 +26,7 @@
 */
 
 #define NUM_KWS   1000
-#define NUM_FILES 100
+#define NUM_FILES (NUM_KWS/10)
 #define MbyN	  10
 #define K	  7
 #define S_SIZE	  44
@@ -183,7 +183,7 @@ void getFpWords()
 {
 	ifstream fin;
 	char word[65];
-	fin.open("stop-words-1.txt", ios::in);
+	fin.open("primes.txt", ios::in);
 	while(fin>>word)
 		fpWords.push_back(word);
 	fin.close();
@@ -1125,7 +1125,7 @@ int main()
 	getStopwords();
 	getFpWords();
 
-	while(chosenFpWords.size() < 100)
+	while(chosenFpWords.size() < 1000)
 	{
 		pos = (int)rand() % fpWords.size();
 		chosenFpWords.insert(fpWords[pos]);
@@ -1277,7 +1277,7 @@ int main()
 			fp++;
 		resultset.clear();		
 	}
-	out<<"\nFP Rate is:\t"<<(float)fp<<endl;
+	out<<"\nFP Rate is:\t"<<(float)fp/10.0<<endl;
 
 	for(int run = 10; run <= 100; run += 10)
 	{
