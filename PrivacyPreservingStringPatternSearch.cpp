@@ -453,7 +453,6 @@ void createSplitTree(splitnode *node)
 	}
 	L.push_back(*o1);
 	R.push_back(*o2);
-	
 	for(vector<string>::iterator it = node->kws.begin(); it != node->kws.end(); it++)
 	{
 		if(*it == *o1 || *it == *o2)
@@ -470,7 +469,6 @@ void createSplitTree(splitnode *node)
 			R.push_back(*it);
 	}
 	// make clusters
-	
 	if(L.size() < R.size())
 	{
 		dummy = L;
@@ -508,14 +506,12 @@ void createSplitTree(splitnode *node)
 		R.push_back(Q.top().name);
 		Q.pop();
 	}
-
 	if(flag)
 	{
 		dummy = L;
 		L = R;
 		R = dummy;
 	}
-	
 	leftNode = new splitnode;
 	leftNode->kws = L;
 	leftNode->left = leftNode->right = NULL;
@@ -526,9 +522,7 @@ void createSplitTree(splitnode *node)
 
 	node->left = leftNode;
 	node->right = rightNode;
-
 	delete(m1);delete(m2);delete(o1);delete(o2);
-
 	createSplitTree(leftNode);
 	createSplitTree(rightNode);
 }
@@ -598,24 +592,13 @@ void createBloomTree(bloomnode *bnode, splitnode *snode, int currentDepth)
 	for(vector<string>::iterator it = snode->kws.begin(); it != snode->kws.end(); it++)
 	{
 		pbfsize += (*it).length();
-		switch((*it).length())
-		{
-			case 3:	bfsize += 6; break;
-			case 4:	bfsize += 10; break;
-			case 5:	bfsize += 15; break;
-			case 6:	bfsize += 21; break;
-			case 7:	bfsize += 28; break;
-			case 8:	bfsize += 36; break;
-			case 9:	bfsize += 45; break;
-			case 10:bfsize += 55; break;
-		}
+		bfsize += ((*it).length() * ((*it).length()+1)) / 2;
 	}
 	if(bnode == bloomroot)
 	{
 		subs = bfsize;
 		pres = pbfsize;
 	}
-
 	if(!snode->left && !snode->right)
 	{
 		bfsize = 55;
@@ -623,13 +606,11 @@ void createBloomTree(bloomnode *bnode, splitnode *snode, int currentDepth)
 		numbitsbf = bfsize*12;
 		numbitspbf = pbfsize*12;
 	}
-
 	else
 	{
 		numbitsbf = bfsize*MbyN;
 		numbitspbf = pbfsize*MbyN;
 	}
-
 	bnode->left = bnode->right = NULL;
 	numintsbf = ceil(numbitsbf/32.0);
 	bnode->bloom = new int[numintsbf];
@@ -643,21 +624,18 @@ void createBloomTree(bloomnode *bnode, splitnode *snode, int currentDepth)
 	
 	bnode->bloomsize = getNearestPrime(numbitsbf);
 	bnode->prefixBloomsize = getNearestPrime(numbitspbf);
-	
 	if(snode->left)
 	{
 		lbnode = new bloomnode;
 		bnode->left = lbnode;
 		createBloomTree(lbnode, snode->left, currentDepth+1);
 	}
-
 	if(snode->right)
 	{
 		rbnode = new bloomnode;
 		bnode->right = rbnode;
 		createBloomTree(rbnode, snode->right, currentDepth+1);
 	}
-	
 	if(snode->kws.size() == 1)
 	{
 		bnode->poly = new Poly;
@@ -743,8 +721,7 @@ void storeInBloom(int *bloom, int bloomsize, unsigned int bloomID, string word)
 	for(unordered_set<string>::iterator it = substrings[word].begin(); it != substrings[word].end(); it++)
 	{	
 		strcpy(str, (*it).c_str());
-		snprintf(buffer, sizeof(buffer), "%d", bloomID);
-		
+		snprintf(buffer, sizeof(buffer), "%d", bloomID);	
 		for(run = 0; run < 7; run++)
 		{
 			sha1_hmac(hashKey[run], 20, (unsigned char*)str, strlen(str), hashStr);
@@ -782,9 +759,7 @@ void storeInPrefixBloom(int *bloom, int bloomsize, unsigned int bloomID, string 
 					str[k] = '0';
 			}
 			str[128] = '\0';
-			
 			snprintf(buffer, sizeof(buffer), "%d", bloomID);
-			
 			for(run = 0; run < 7; run++)
 			{
 				sha1_hmac(hashKey[run], 20, (unsigned char*)str, strlen(str), hashStr);
@@ -806,7 +781,6 @@ bool searchInBloom(int *bloom, int bloomsize, unsigned int bloomID, char *str)
 	unsigned char hashStr[20], hashFinal[20];
 
 	snprintf(buffer, sizeof(buffer), "%d", bloomID);
-
 	for(run = 0; run < 7; run++)
 	{
 		sha1_hmac(hashKey[run], 20, (unsigned char*)str, strlen(str), hashStr);
@@ -817,7 +791,6 @@ bool searchInBloom(int *bloom, int bloomsize, unsigned int bloomID, char *str)
 		v[run] = hashVal%bloomsize;
 		ret = ret && (bloom[v[run]/32] & 1<<(v[run]%32));
 	}
-	
 	return ret;
 }
 
@@ -1075,51 +1048,34 @@ double getQuery(int num, bool type, bool isRel)
 	int pos, qsize;
 	vector<string> s;
 	string q;
-	if(type)
+	do
 	{
-		do
+		qsize = 0;
+		s.clear();
+		pos = (int)rand() % keywords.size();
+		if(type)
 		{
-			qsize = 0;
-			s.clear();
-			pos = (int)rand() % keywords.size();
 			for(unsigned int i = 0; i < keywords[pos].length(); i++)
 				for(unsigned int j = i+1; j < keywords[pos].length()+1; j++)
 					s.push_back(keywords[pos].substr(i, j-i));
-			pos = rand() % s.size();
-			q = s[pos];
-			for(unordered_map<string, vector<pairs> >::iterator it1 = inverted_table2.begin(); it1 != inverted_table2.end(); it1++)
-				if((*it1).first.find(q) != string::npos)
-					qsize++;
-		}while((qsize < num) || (qsize >= num +10));
-		t0 = clock();
-		if(isRel)
-			searchOnQueryRel(q, type);
+		}
 		else
-			searchOnQueryAcc(q, type);
-		t1 = clock();
-	}
-	else
-	{
-		do
 		{
-			qsize = 0;	
-			s.clear();
-			pos = (int)rand() % keywords.size();
 			for(unsigned int j = 1; j < keywords[pos].length()+1; j++)
 				s.push_back(keywords[pos].substr(0, j));
-			pos = rand() % s.size();
-			q = s[pos];
-			for(unordered_map<string, vector<pairs> >::iterator it1 = inverted_table2.begin(); it1 != inverted_table2.end(); it1++)
-				if((*it1).first.find(q) != string::npos)
-					qsize++;
-		}while((qsize < num) || (qsize >= num +10));
-		t0 = clock();
-		if(isRel)
-			searchOnQueryRel(q, type);
-		else
-			searchOnQueryAcc(q, type);
-		t1 = clock();
-	}
+		}
+		pos = rand() % s.size();
+		q = s[pos];
+		for(unordered_map<string, vector<pairs> >::iterator it1 = inverted_table2.begin(); it1 != inverted_table2.end(); it1++)
+			if((*it1).first.find(q) != string::npos)
+				qsize++;
+	}while((qsize < num) || (qsize >= num +10));
+	t0 = clock();
+	if(isRel)
+		searchOnQueryRel(q, type);
+	else
+		searchOnQueryAcc(q, type);
+	t1 = clock();
 	return (double)(t1 - t0)/CLOCKS_PER_SEC;
 }
 
