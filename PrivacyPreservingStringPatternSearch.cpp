@@ -591,8 +591,8 @@ void createBloomTree(bloomnode *bnode, splitnode *snode, int currentDepth)
 
 	for(vector<string>::iterator it = snode->kws.begin(); it != snode->kws.end(); it++)
 	{
-		pbfsize += (*it).length();
-		bfsize += ((*it).length() * ((*it).length()+1)) / 2;
+		pbfsize += (*it).length() - 1;
+		bfsize += ((*it).length() * ((*it).length()-1)) / 2;
 	}
 	if(bnode == bloomroot)
 	{
@@ -601,8 +601,8 @@ void createBloomTree(bloomnode *bnode, splitnode *snode, int currentDepth)
 	}
 	if(!snode->left && !snode->right)
 	{
-		bfsize = 55;
-		pbfsize = 10;
+		bfsize = 45;
+		pbfsize = 9;
 		numbitsbf = bfsize*12;
 		numbitspbf = pbfsize*12;
 	}
@@ -643,12 +643,12 @@ void createBloomTree(bloomnode *bnode, splitnode *snode, int currentDepth)
 		bnode->poly->Kinit = rand()%P;
 		string word = *snode->kws.begin();
 		int l = 0, r, i, t = substrings[word].size();
-		if(t == 55)
+		if(t == 45)
 			r = 0;
 		else if(t >= 30)
-			r = rand()%(55-t);
+			r = rand()%(45-t);
 		else if(t < 30)
-			r = (rand()%25) + 30-t;
+			r = (rand()%15) + 30-t;
 		bnode->poly->degree = r + t + 1;		
 		roots = new unsigned int[bnode->poly->degree-1];
 		bnode->poly->coeff = new unsigned int[bnode->poly->degree];
@@ -741,9 +741,9 @@ void storeInPrefixBloom(int *bloom, int bloomsize, unsigned int bloomID, string 
 	char str[200], buffer[33];
 	unsigned char hashStr[20], hashFinal[20];
 	
-	if(startPoint < word.length())
+	if(startPoint < word.length()-1)
 	{
-		for(j = startPoint+1; j < word.length()+1; j++)
+		for(j = startPoint+2; j < word.length()+1; j++)
 		{
 			allpres.insert(word.substr(startPoint, j-startPoint));
 			strcpy((char *)ip, word.substr(startPoint, j-startPoint).c_str());
@@ -1055,13 +1055,13 @@ double getQuery(int num, bool type, bool isRel)
 		pos = (int)rand() % keywords.size();
 		if(type)
 		{
-			for(unsigned int i = 0; i < keywords[pos].length(); i++)
-				for(unsigned int j = i+1; j < keywords[pos].length()+1; j++)
+			for(unsigned int i = 0; i < keywords[pos].length()-1; i++)
+				for(unsigned int j = i+2; j < keywords[pos].length()+1; j++)
 					s.push_back(keywords[pos].substr(i, j-i));
 		}
 		else
 		{
-			for(unsigned int j = 1; j < keywords[pos].length()+1; j++)
+			for(unsigned int j = 2; j < keywords[pos].length()+1; j++)
 				s.push_back(keywords[pos].substr(0, j));
 		}
 		pos = rand() % s.size();
@@ -1216,9 +1216,9 @@ int main()
 	for(map<string, a_list>::iterator it = inverted_table.begin(); it != inverted_table.end();it++)
 	{
 		len = (*it).first.length();
-		for(unsigned int k = 0; k < len; k++)
+		for(unsigned int k = 0; k < len-1; k++)
 		{
-			for(unsigned int j = k+1; j < len+1; j++)
+			for(unsigned int j = k+2; j < len+1; j++)
 			{
 				strcpy((char *)ip, (*it).first.substr(k, j-k).c_str());
 				for(i = strlen((char *)ip); i < 128; i++)
